@@ -1,23 +1,28 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Amigo Secreto Virtual</title>
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Amigo Secreto Remoto 🎁</title>
+
+  <!-- React + Babel -->
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+
+  <!-- Tailwind (opcional, para estilos bonitos) -->
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center p-4">
 
-<body>
-  <div id="root"></div>
+  <div id="root" class="w-full max-w-md"></div>
 
-  <!-- 🔥 CONFIGURACIÓN DE FIREBASE -->
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-    import { getFirestore, doc, setDoc, getDoc, updateDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+  <!-- 🔥 Firebase SDKs (compatibles con React directo en navegador) -->
+  <script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore-compat.js"></script>
 
+  <script>
+    // 🔹 Configuración de tu proyecto Firebase
     const firebaseConfig = {
       apiKey: "AIzaSyBnbMA899xhAT0wYrpUcKa1H0v3qzOPs6A",
       authDomain: "amigo-secreto-9e366.firebaseapp.com",
@@ -27,186 +32,119 @@
       appId: "1:134510716985:web:68f528a74abe082e6045e8"
     };
 
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
-    window.db = db; // 🔹 disponible globalmente
+    // 🔹 Inicializar Firebase
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    // 🔹 Hacer la base de datos accesible globalmente
+    window.db = db;
   </script>
 
-  <!-- 🧠 CÓDIGO PRINCIPAL DE LA APP -->
+  <!-- 🧠 Lógica del juego con React -->
   <script type="text/babel">
+
     const { useState, useEffect } = React;
 
-    function SecretSanta() {
-      const [participants, setParticipants] = useState([]);
-      const [newName, setNewName] = useState('');
-      const [gameId, setGameId] = useState('');
+    function App() {
+      const [players, setPlayers] = useState([]);
+      const [name, setName] = useState("");
       const [assignments, setAssignments] = useState({});
-      const [revealed, setRevealed] = useState([]);
-      const [isOrganizer, setIsOrganizer] = useState(false);
-      const [viewingAs, setViewingAs] = useState('');
-      const [myAssignment, setMyAssignment] = useState('');
-      const [showAssignment, setShowAssignment] = useState(false);
-      const [step, setStep] = useState('setup');
-      const [error, setError] = useState('');
+      const [loading, setLoading] = useState(false);
 
-      // 🔹 Detectar si hay un juego activo en el URL
+      // 🔹 Cargar jugadores desde Firestore
       useEffect(() => {
-        const urlParams = new URLSearchParams(window.location.search);
-        const id = urlParams.get('game');
-        if (id) {
-          setGameId(id);
-          loadGameFromFirebase(id);
-        }
+        const unsubscribe = db.collection("jugadores").onSnapshot(snapshot => {
+          const data = snapshot.docs.map(doc => doc.data().nombre);
+          setPlayers(data);
+        });
+        return () => unsubscribe();
       }, []);
 
-      // 🔹 Escuchar cambios en Firestore en tiempo real
-      const loadGameFromFirebase = async (id) => {
-        const ref = doc(window.db, "games", id);
-        onSnapshot(ref, (docSnap) => {
-          if (docSnap.exists()) {
-            const data = docSnap.data();
-            setParticipants(data.participants || []);
-            setAssignments(data.assignments || {});
-            setRevealed(data.revealed || []);
-            setStep(data.assignments ? "reveal" : "setup");
-          } else {
-            setError("No se encontró este juego o fue eliminado.");
-          }
+      // 🔹 Agregar jugador
+      const addPlayer = async () => {
+        if (!name.trim()) return;
+        await db.collection("jugadores").add({ nombre: name.trim() });
+        setName("");
+      };
+
+      // 🔹 Hacer el sorteo
+      const shuffle = async () => {
+        if (players.length < 2) return alert("Necesitas al menos 2 jugadores");
+        setLoading(true);
+
+        // Mezclar
+        let shuffled = [...players].sort(() => Math.random() - 0.5);
+        const newAssignments = {};
+        players.forEach((p, i) => {
+          newAssignments[p] = shuffled[(i + 1) % shuffled.length];
         });
+
+        // Guardar en Firestore
+        await db.collection("sorteos").doc("asignaciones").set(newAssignments);
+        setAssignments(newAssignments);
+        setLoading(false);
+        alert("🎉 Sorteo realizado correctamente!");
       };
 
-      const generateGameId = () => Math.random().toString(36).substring(2, 8).toUpperCase();
-
-      const addParticipant = () => {
-        if (newName.trim() && !participants.includes(newName.trim())) {
-          setParticipants([...participants, newName.trim()]);
-          setNewName('');
-          setError('');
-        }
-      };
-
-      const removeParticipant = (name) => {
-        setParticipants(participants.filter(p => p !== name));
-      };
-
-      const shuffleArray = (array) => {
-        const shuffled = [...array];
-        for (let i = shuffled.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-        }
-        return shuffled;
-      };
-
-      // 🔹 Crear sorteo y guardarlo en Firebase
-      const createAssignments = async () => {
-        if (participants.length < 3) {
-          setError('Necesitas al menos 3 participantes');
-          return;
-        }
-
-        let attempts = 0;
-        let validAssignment = false;
-        let newAssignments = {};
-
-        while (!validAssignment && attempts < 100) {
-          const shuffled = shuffleArray(participants);
-          newAssignments = {};
-          validAssignment = true;
-
-          for (let i = 0; i < participants.length; i++) {
-            const giver = participants[i];
-            const receiver = shuffled[i];
-            if (giver === receiver) {
-              validAssignment = false;
-              break;
-            }
-            newAssignments[giver] = receiver;
-          }
-          attempts++;
-        }
-
-        if (validAssignment) {
-          const id = generateGameId();
-          const ref = doc(window.db, "games", id);
-          const gameData = {
-            participants,
-            assignments: newAssignments,
-            revealed: [],
-            createdAt: new Date().toISOString()
-          };
-          await setDoc(ref, gameData);
-
-          setGameId(id);
-          setAssignments(newAssignments);
-          setRevealed([]);
-          setIsOrganizer(true);
-          setStep('share');
-
-          const url = `${window.location.origin}${window.location.pathname}?game=${id}`;
-          window.history.pushState({}, '', url);
-        } else {
-          setError('No se pudo crear una asignación válida. Intenta de nuevo.');
-        }
-      };
-
-      // 🔹 Revelar amigo secreto y actualizar Firestore
-      const revealMyAssignment = async () => {
-        if (viewingAs && assignments[viewingAs]) {
-          if (revealed.includes(viewingAs)) {
-            setError('Este nombre ya fue revelado');
-            return;
-          }
-          setMyAssignment(assignments[viewingAs]);
-          setShowAssignment(true);
-
-          const newRevealed = [...revealed, viewingAs];
-          setRevealed(newRevealed);
-
-          const ref = doc(window.db, "games", gameId);
-          await updateDoc(ref, { revealed: newRevealed });
-        }
-      };
-
-      const copyLink = () => {
-        const url = `${window.location.origin}${window.location.pathname}?game=${gameId}`;
-        navigator.clipboard.writeText(url);
-        alert('¡Link copiado! Compártelo con los participantes.');
-      };
-
-      const availableNames = participants.filter(n => !revealed.includes(n));
+      // 🔹 Ver asignaciones si existen
+      useEffect(() => {
+        db.collection("sorteos").doc("asignaciones").get().then(doc => {
+          if (doc.exists) setAssignments(doc.data());
+        });
+      }, []);
 
       return (
-        <div className="min-h-screen bg-gradient-to-br from-red-50 via-green-50 to-red-50 p-4">
-          <div className="max-w-2xl mx-auto bg-white rounded-2xl shadow-xl p-8">
-            <h1 className="text-3xl font-bold text-center text-gray-800 mb-6">🎁 Amigo Secreto Virtual</h1>
+        <div className="bg-white shadow-xl rounded-2xl p-6 w-full">
+          <h1 className="text-2xl font-bold text-center mb-4">🎁 Amigo Secreto Remoto</h1>
 
-            {error && (
-              <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-                {error}
-                <button onClick={() => setError('')} className="float-right font-bold">×</button>
-              </div>
-            )}
+          <div className="flex gap-2 mb-4">
+            <input
+              className="border p-2 flex-grow rounded-lg"
+              type="text"
+              placeholder="Tu nombre"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+            <button
+              onClick={addPlayer}
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+            >
+              Agregar
+            </button>
+          </div>
 
-            {/* PASO 1: CREAR JUEGO */}
-            {step === "setup" && (
-              <div className="space-y-4">
-                <input
-                  type="text"
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  placeholder="Nombre del participante"
-                  className="w-full px-4 py-2 border rounded-lg"
-                />
-                <button onClick={addParticipant} className="w-full bg-green-500 text-white py-2 rounded-lg">Agregar</button>
+          <div className="mb-4">
+            <h2 className="font-semibold">👥 Jugadores:</h2>
+            <ul className="list-disc ml-6">
+              {players.map((p, i) => (
+                <li key={i}>{p}</li>
+              ))}
+            </ul>
+          </div>
 
-                <ul className="divide-y">
-                  {participants.map((p, i) => (
-                    <li key={i} className="flex justify-between py-1">
-                      {p}
-                      <button onClick={() => removeParticipant(p)} className="text-red-500">✕</button>
-                    </li>
-                  ))}
-                </ul>
+          <button
+            onClick={shuffle}
+            disabled={loading}
+            className="bg-green-600 text-white w-full py-2 rounded-lg hover:bg-green-700 mb-3"
+          >
+            {loading ? "Sorteando..." : "🎲 Hacer Sorteo"}
+          </button>
 
-                {participants.length >=
+          {Object.keys(assignments).length > 0 && (
+            <div className="mt-4">
+              <h2 className="font-semibold text-lg mb-2">🔒 Asignaciones (solo organizador)</h2>
+              <ul className="list-none">
+                {Object.entries(assignments).map(([a, b]) => (
+                  <li key={a} className="p-1 border-b">{a} → {b}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    ReactDOM.render(<App />, document.getElementById("root"));
+  </script>
+</body>
+</html>
