@@ -4,19 +4,15 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Amigo Secreto Virtual 🎁</title>
-
   <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
   <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
-
   <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="bg-gray-100 min-h-screen p-4">
-
-  <div id="root" class="w-full max-w-md mx-auto"></div>
-
   <script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore-compat.js"></script>
+</head>
+<body class="bg-gray-100 min-h-screen p-4">
+  <div id="root" class="w-full max-w-md mx-auto"></div>
 
   <script>
     // 🔹 Configuración de tu proyecto Firebase
@@ -28,8 +24,6 @@
       messagingSenderId: "134510716985",
       appId: "1:134510716985:web:68f528a74abe082e6045e8"
     };
-
-    // 🔹 Inicializar Firebase
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
     window.db = db;
@@ -39,15 +33,14 @@
     const { useState, useEffect } = React;
 
     // =============================================================
-    // COMPONENTE #1: VISTA DEL ORGANIZADOR (CREAR JUEGO)
+    // VISTA #1: ORGANIZADOR (CREAR JUEGO)
     // =============================================================
     function AdminView() {
       const [players, setPlayers] = useState([]);
       const [name, setName] = useState("");
       const [loading, setLoading] = useState(false);
-      const [createdGameId, setCreatedGameId] = useState(null); // Guarda el ID del juego creado
+      const [createdGame, setCreatedGame] = useState(null); // Guarda { gameId, adminSecret }
 
-      // Función para agregar jugador a la lista local
       const addPlayer = () => {
         if (name.trim() && !players.includes(name.trim())) {
           setPlayers([...players, name.trim()]);
@@ -55,56 +48,47 @@
         }
       };
       
-      // Función para quitar jugador de la lista local
       const removePlayer = (playerToRemove) => {
         setPlayers(players.filter(p => p !== playerToRemove));
       };
       
-      // Genera un código de 6 letras/números
-      const generateGameId = () => {
-         return Math.random().toString(36).substring(2, 8).toUpperCase();
-      };
+      const generateId = (length) => Math.random().toString(36).substring(2, length + 2).toUpperCase();
 
-      // Función para crear el juego y hacer el sorteo
       const createGame = async () => {
         if (players.length < 2) return alert("Necesitas al menos 2 jugadores");
         setLoading(true);
 
-        const newGameId = generateGameId();
-
+        const newGameId = generateId(6);
+        const adminSecret = generateId(10); // <-- NUEVO: Código secreto del admin
+        
         // --- Lógica del sorteo (robusta) ---
         let givers = [...players];
         let receivers = [...players];
         const finalAssignments = {};
-
         for (const giver of givers) {
           let possibleReceivers = receivers.filter(r => r !== giver);
-          
-          if (possibleReceivers.length === 0 && receivers.length === 1 && receivers[0] === giver) {
-            // Caso especial: el último se saca a sí mismo. Intercambiamos.
-            const randomGiver = players[0]; // Tomamos al primero de la lista
+          if (possibleReceivers.length === 0) { // Caso especial: el último se saca a sí mismo
+            const randomGiver = players[0]; 
             const randomGiverTarget = finalAssignments[randomGiver];
-            
-            finalAssignments[randomGiver] = giver; // El primero ahora le da al último
-            finalAssignments[giver] = randomGiverTarget; // El último le da al amigo del primero
-            
-            receivers = []; // Se acabó
-          } else {
-            let receiver = possibleReceivers[Math.floor(Math.random() * possibleReceivers.length)];
-            finalAssignments[giver] = receiver;
-            receivers = receivers.filter(r => r !== receiver); // Quitar de la lista de receptores
+            finalAssignments[randomGiver] = giver; 
+            finalAssignments[giver] = randomGiverTarget;
+            break;
           }
+          let receiver = possibleReceivers[Math.floor(Math.random() * possibleReceivers.length)];
+          finalAssignments[giver] = receiver;
+          receivers = receivers.filter(r => r !== receiver); 
         }
         // --- Fin del sorteo ---
 
         try {
-          // Usamos un 'batch' de Firebase para guardar todo en una sola operación
           const batch = db.batch();
           
-          // 1. Creamos la información del juego
+          // 1. Creamos el documento principal del juego
           batch.set(db.collection("juegos").doc(newGameId), { 
               createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-              playerCount: players.length
+              playerCount: players.length,
+              adminSecret: adminSecret,  // <-- NUEVO: Guardamos el secreto del admin
+              finalReveal: false       // <-- NUEVO: Controla la revelación final
           });
           
           // 2. Creamos los documentos de cada participante
@@ -113,13 +97,14 @@
             batch.set(playerDocRef, {
               nombre: giver,
               leTocaA: receiver,
-              revelado: false // <-- importante: 'false' significa que no ha sido visto
+              revelado: false,
+              wishlist: ""  // <-- NUEVO: Campo para la lista de deseos
             });
           }
           
-          await batch.commit(); // Ejecutamos todas las operaciones
+          await batch.commit();
           setLoading(false);
-          setCreatedGameId(newGameId); // Mostramos la pantalla de éxito
+          setCreatedGame({ gameId: newGameId, adminSecret: adminSecret }); // Mostramos la pantalla de éxito
 
         } catch (error) {
           console.error("Error al crear el juego:", error);
@@ -128,95 +113,72 @@
         }
       };
       
-      // Si el juego ya se creó, muestra la pantalla de éxito
-      if (createdGameId) {
-        const shareLink = `${window.location.href.split('?')[0]}?juego=${createdGameId}`;
+      // --- Pantalla de Éxito (¡AHORA MUESTRA 2 LINKS!) ---
+      if (createdGame) {
+        const baseUrl = window.location.href.split('?')[0];
+        const shareLink = `${baseUrl}?juego=${createdGame.gameId}`;
+        const adminLink = `${baseUrl}?juego=${createdGame.gameId}&admin=${createdGame.adminSecret}`;
         
         return (
-          <div className="bg-white shadow-xl rounded-2xl p-6 w-full">
-            <h1 className="text-2xl font-bold text-center mb-4">🎁 Amigo Secreto Virtual</h1>
-            <div className="bg-green-100 border-l-4 border-green-500 text-green-700 p-4 rounded-lg mb-4">
+          <div className="bg-white shadow-xl rounded-2xl p-6 w-full space-y-4">
+            <h1 className="text-2xl font-bold text-center mb-2">🎁 Amigo Secreto Virtual</h1>
+            <div className="bg-green-100 border-l-4 border-green-500 text-green-700 p-4 rounded-lg">
               <p className="font-bold">¡Sorteo creado exitosamente!</p>
-              <p>Código del juego: <span className="font-mono text-lg">{createdGameId}</span></p>
+              <p>Código del juego: <span className="font-mono text-lg">{createdGame.gameId}</span></p>
             </div>
             
-            <p className="font-semibold mb-2">Paso 2: Comparte este link con todos los participantes</p>
-            <div className="flex gap-2">
-              <input 
-                type="text" 
-                readOnly 
-                value={shareLink} 
-                className="border p-2 flex-grow rounded-lg bg-gray-100"
-              />
-              <button 
-                onClick={() => navigator.clipboard.writeText(shareLink)}
-                className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700">
-                Copiar
-              </button>
+            <div>
+              <p className="font-semibold mb-2">Paso 2: Comparte este link con todos:</p>
+              <div className="flex gap-2">
+                <input type="text" readOnly value={shareLink} className="border p-2 flex-grow rounded-lg bg-gray-100"/>
+                <button onClick={() => navigator.clipboard.writeText(shareLink)} className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700">Copiar</button>
+              </div>
+            </div>
+
+            {/* --- NUEVO: LINK DE ADMINISTRADOR --- */}
+            <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 p-4 rounded-lg">
+              <p className="font-bold">🚨 ¡SOLO PARA TI! (Link de Admin)</p>
+              <p className="text-sm mb-2">Guarda este link secreto. Te servirá para revelar todos los nombres al final del juego.</p>
+              <div className="flex gap-2">
+                <input type="text" readOnly value={adminLink} className="border p-2 flex-grow rounded-lg bg-gray-100"/>
+                <button onClick={() => navigator.clipboard.writeText(adminLink)} className="bg-yellow-600 text-white px-4 py-2 rounded-lg hover:bg-yellow-700">Copiar</button>
+              </div>
             </div>
             
-            <a href={shareLink} className="block w-full text-center bg-red-600 text-white py-2 rounded-lg hover:bg-red-700 mt-4">
+             <a href={shareLink} className="block w-full text-center bg-red-600 text-white py-2 rounded-lg hover:bg-red-700 mt-4">
                 Continuar para ver mi asignación
             </a>
-            
-             <div className="mt-6 text-sm text-gray-600">
-                <h3 className="font-bold mb-2">¿Cómo funciona?</h3>
-                <ol className="list-decimal list-inside space-y-1">
-                    <li>El organizador agrega todos los nombres y crea el sorteo (¡listo!).</li>
-                    <li>Se comparte el link con todos los participantes.</li>
-                    <li>Cada persona abre el link, selecciona su nombre y descubre a quién le toca.</li>
-                    <li>Una vez que un nombre es usado, queda bloqueado.</li>
-                    <li>¡Nadie puede ver la asignación de otra persona!</li>
-                </ol>
-             </div>
           </div>
         );
       }
       
-      // Si el juego no se ha creado, muestra el formulario de administrador
+      // --- Pantalla de Creación (Formulario) ---
       return (
         <div className="bg-white shadow-xl rounded-2xl p-6 w-full">
           <h1 className="text-2xl font-bold text-center mb-4">🎁 Amigo Secreto Virtual</h1>
           <p className="text-center text-gray-600 mb-4">Paso 1: Agrega a los participantes y crea el juego.</p>
-          
           <div className="flex gap-2 mb-4">
             <input
-              className="border p-2 flex-grow rounded-lg"
-              type="text"
-              placeholder="Nombre del participante"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
+              className="border p-2 flex-grow rounded-lg" type="text" placeholder="Nombre del participante"
+              value={name} onChange={(e) => setName(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && addPlayer()}
             />
-            <button
-              onClick={addPlayer}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-            >
+            <button onClick={addPlayer} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
               Agregar
             </button>
           </div>
-
           <div className="mb-4 min-h-[100px]">
             <h2 className="font-semibold">👥 Jugadores: ({players.length})</h2>
             <ul className="list-disc ml-6 mt-2">
               {players.map((p) => (
                 <li key={p} className="flex justify-between items-center">
                   {p}
-                  <button 
-                    onClick={() => removePlayer(p)} 
-                    className="text-red-500 hover:text-red-700 text-xs">
-                    (quitar)
-                  </button>
+                  <button onClick={() => removePlayer(p)} className="text-red-500 hover:text-red-700 text-xs">(quitar)</button>
                 </li>
               ))}
             </ul>
           </div>
-
-          <button
-            onClick={createGame}
-            disabled={loading || players.length < 2}
-            className="bg-green-600 text-white w-full py-2 rounded-lg hover:bg-green-700 disabled:opacity-50"
-          >
+          <button onClick={createGame} disabled={loading || players.length < 2} className="bg-green-600 text-white w-full py-2 rounded-lg hover:bg-green-700 disabled:opacity-50">
             {loading ? "Creando juego..." : `🎲 Crear Sorteo (${players.length} jugadores)`}
           </button>
         </div>
@@ -224,90 +186,135 @@
     }
 
     // =============================================================
-    // COMPONENTE #2: VISTA DEL PARTICIPANTE (VER ASIGNACIÓN)
+    // VISTA #2: PARTICIPANTE (VER ASIGNACIÓN Y WISHLIST)
     // =============================================================
     function ParticipantView({ gameId }) {
-      const [unclaimedPlayers, setUnclaimedPlayers] = useState([]);
-      const [selectedName, setSelectedName] = useState("");
-      const [myAssignment, setMyAssignment] = useState(null); // Aquí se guarda el resultado
-      
       const [loading, setLoading] = useState(true);
       const [error, setError] = useState(null);
+      
+      // Lista de jugadores que no han revelado su nombre
+      const [unclaimedPlayers, setUnclaimedPlayers] = useState([]);
+      const [selectedName, setSelectedName] = useState("");
+      
+      // Datos guardados del usuario
+      const [myIdentity, setMyIdentity] = useState(null); // { myName, myTarget }
+      
+      // Datos de la Lista de Deseos
+      const [myWishlist, setMyWishlist] = useState(""); // Mi lista
+      const [targetWishlist, setTargetWishlist] = useState(null); // La lista de mi amigo secreto
+      const [savingWishlist, setSavingWishlist] = useState(false);
+      
+      const storageKey = 'amigoSecreto-' + gameId;
 
-      // Cargar la lista de jugadores que NO han visto su asignación
+      // Cargar datos al iniciar
       useEffect(() => {
-        try {
-          const unsubscribe = db.collection("juegos").doc(gameId).collection("participantes")
-            .where("revelado", "==", false) // <-- Solo trae los nombres no reclamados
-            .onSnapshot(snapshot => {
-              if (snapshot.empty) {
-                setError("Este juego no existe o ya todos han visto su nombre.");
-              }
-              const playerList = snapshot.docs.map(doc => doc.data().nombre);
-              setUnclaimedPlayers(playerList);
-              setLoading(false);
-            }, (err) => {
-               setError("No se pudo cargar el juego. Verifica el código.");
-               setLoading(false);
-            });
-          return () => unsubscribe();
-        } catch (err) {
-            setError("El código del juego no es válido.");
-            setLoading(false);
+        // 1. Revisa si el usuario ya se había identificado
+        const storedIdentity = localStorage.getItem(storageKey);
+        if (storedIdentity) {
+          const data = JSON.parse(storedIdentity);
+          setMyIdentity(data);
+          // Carga la lista de deseos de este usuario
+          fetchMyWishlist(data.myName);
+          // Carga la lista de deseos del amigo secreto
+          fetchTargetWishlist(data.myTarget);
+          setLoading(false);
+        } else {
+          // 2. Si no, carga la lista de jugadores que faltan
+          fetchUnclaimedPlayers();
         }
       }, [gameId]);
 
-      // Función para revelar el amigo secreto
+      // Función para buscar jugadores que no han visto su nombre
+      const fetchUnclaimedPlayers = () => {
+        setLoading(true);
+        db.collection("juegos").doc(gameId).collection("participantes").where("revelado", "==", false)
+          .get().then(snapshot => {
+            if (snapshot.empty) {
+              setError("Este juego no existe o ya todos han visto su nombre.");
+            }
+            const playerList = snapshot.docs.map(doc => doc.data().nombre);
+            setUnclaimedPlayers(playerList);
+            setLoading(false);
+          }).catch(err => {
+            setError("No se pudo cargar el juego. Verifica el código.");
+            setLoading(false);
+          });
+      };
+      
+      // Función para buscar MI lista de deseos
+      const fetchMyWishlist = async (myName) => {
+         try {
+            const doc = await db.collection("juegos").doc(gameId).collection("participantes").doc(myName).get();
+            if(doc.exists) setMyWishlist(doc.data().wishlist || "");
+         } catch(e) {/* no-op */}
+      };
+
+      // Función para buscar la lista de deseos de MI AMIGO SECRETO
+      const fetchTargetWishlist = async (targetName) => {
+         try {
+            const doc = await db.collection("juegos").doc(gameId).collection("participantes").doc(targetName).get();
+            if(doc.exists) setTargetWishlist(doc.data().wishlist || "");
+         } catch(e) { setTargetWishlist(""); } // Pone "" si hay error
+      };
+
+      // Función para revelar el amigo secreto por primera vez
       const revealMyName = async () => {
         if (!selectedName) return alert("Por favor, selecciona tu nombre de la lista.");
         setLoading(true);
 
         const playerDocRef = db.collection("juegos").doc(gameId).collection("participantes").doc(selectedName);
 
-        // Usamos una "transacción" para evitar que dos personas reclamen el mismo nombre
         try {
-          await db.runTransaction(async (transaction) => {
+          const targetName = await db.runTransaction(async (transaction) => {
             const doc = await transaction.get(playerDocRef);
-            if (!doc.exists) {
-              throw "¡Tu nombre no se encontró en este juego!";
-            }
-            if (doc.data().revelado) {
-              throw "¡Este nombre ya fue seleccionado por alguien más!";
-            }
+            if (!doc.exists) throw "¡Tu nombre no se encontró en este juego!";
+            if (doc.data().revelado) throw "¡Este nombre ya fue seleccionado por alguien más!";
             
-            // Si todo está bien, actualizamos el nombre como "revelado"
             transaction.update(playerDocRef, { revelado: true });
             return doc.data().leTocaA;
-          })
-          .then((targetName) => {
-            setMyAssignment(targetName); // Guardamos el resultado
-            setLoading(false);
           });
+          
+          // ¡Éxito! Guarda la identidad en el navegador
+          const identity = { myName: selectedName, myTarget: targetName };
+          localStorage.setItem(storageKey, JSON.stringify(identity));
+          
+          setMyIdentity(identity); // Guarda en el estado
+          fetchTargetWishlist(targetName); // Busca la wishlist del objetivo
+          setLoading(false);
           
         } catch (e) {
           setError(typeof e === 'string' ? e : "Hubo un error al consultar. Intenta de nuevo.");
           setLoading(false);
+          // Si falla, refrescamos la lista de jugadores por si alguien más lo tomó
+          fetchUnclaimedPlayers();
         }
       };
 
-      // Si ya se reveló, muestra el resultado
-      if (myAssignment) {
-        return (
-          <div className="bg-white shadow-xl rounded-2xl p-6 w-full text-center">
-             <h1 className="text-2xl font-bold text-center mb-4">🎁 Amigo Secreto</h1>
-             <p className="text-lg text-gray-700">¡Hola, <span className="font-bold">{selectedName}</span>!</p>
-             <p className="text-lg text-gray-700 mt-4">Te toca darle un regalo a...</p>
-             
-             <div className="my-6 p-4 bg-blue-100 rounded-lg">
-                <p className="text-4xl font-bold text-blue-700">{myAssignment}</p>
+      // --- NUEVO: Función para guardar MI lista de deseos ---
+      const saveWishlist = async () => {
+        if (!myIdentity) return;
+        setSavingWishlist(true);
+        try {
+          await db.collection("juegos").doc(gameId).collection("participantes").doc(myIdentity.myName).update({
+            wishlist: myWishlist
+          });
+          alert("¡Lista de deseos guardada!");
+        } catch (error) {
+          alert("Error al guardar la lista.");
+        }
+        setSavingWishlist(false);
+      };
+
+      // --- PANTALLA DE CARGA ---
+      if (loading && !myIdentity) {
+          return (
+             <div className="bg-white shadow-xl rounded-2xl p-6 w-full text-center">
+                <p className="text-lg text-gray-700">Cargando juego...</p>
              </div>
-             
-             <p className="text-sm text-gray-500">¡Que no se te olvide!</p>
-          </div>
-        );
+           );
       }
       
-      // Muestra un error si lo hay
+      // --- PANTALLA DE ERROR ---
       if (error) {
            return (
              <div className="bg-white shadow-xl rounded-2xl p-6 w-full text-center">
@@ -318,68 +325,104 @@
            );
       }
       
-      // Muestra la pantalla de carga
-      if (loading) {
-          return (
-             <div className="bg-white shadow-xl rounded-2xl p-6 w-full text-center">
-                <p className="text-lg text-gray-700">Cargando juego...</p>
-             </div>
-           );
+      // --- PANTALLA #1: SELECCIONAR NOMBRE (Si no está en localStorage) ---
+      if (!myIdentity) {
+        return (
+          <div className="bg-white shadow-xl rounded-2xl p-6 w-full">
+            <h1 className="text-2xl font-bold text-center mb-4">🎁 Amigo Secreto</h1>
+            <p className="text-center text-gray-600 mb-4">Selecciona tu nombre de la lista para descubrir quién te tocó.</p>
+            <select className="border p-2 w-full rounded-lg mb-4" value={selectedName} onChange={(e) => setSelectedName(e.target.value)}>
+              <option value="">-- Por favor, elige tu nombre --</option>
+              {unclaimedPlayers.map(p => (<option key={p} value={p}>{p}</option>))}
+            </select>
+            <button onClick={revealMyName} disabled={loading || !selectedName} className="bg-red-600 text-white w-full py-2 rounded-lg hover:bg-red-700 disabled:opacity-50">
+              {loading ? "..." : "¡Revelar mi amigo secreto!"}
+            </button>
+          </div>
+        );
       }
-
-      // Muestra el formulario para seleccionar el nombre
+      
+      // --- PANTALLA #2: MOSTRAR RESULTADO (Si ya está en localStorage) ---
       return (
-        <div className="bg-white shadow-xl rounded-2xl p-6 w-full">
-          <h1 className="text-2xl font-bold text-center mb-4">🎁 Amigo Secreto</h1>
-          <p className="text-center text-gray-600 mb-4">Selecciona tu nombre de la lista para descubrir quién te tocó.</p>
-          
-          <select 
-            className="border p-2 w-full rounded-lg mb-4"
-            value={selectedName}
-            onChange={(e) => setSelectedName(e.target.value)}
-          >
-            <option value="">-- Por favor, elige tu nombre --</option>
-            {unclaimedPlayers.map(p => (
-              <option key={p} value={p}>{p}</option>
-            ))}
-          </select>
-          
-          <button
-            onClick={revealMyName}
-            disabled={loading || !selectedName}
-            className="bg-red-600 text-white w-full py-2 rounded-lg hover:bg-red-700 disabled:opacity-50"
-          >
-            {loading ? "..." : "¡Revelar mi amigo secreto!"}
-          </button>
+        <div className="bg-white shadow-xl rounded-2xl p-6 w-full space-y-6">
+           {/* --- 1. Tu resultado --- */}
+           <div className="text-center">
+             <h1 className="text-2xl font-bold text-center mb-2">🎁 Amigo Secreto</h1>
+             <p className="text-lg text-gray-700">¡Hola, <span className="font-bold">{myIdentity.myName}</span>!</p>
+             <p className="text-lg text-gray-700 mt-4">Te toca darle un regalo a...</p>
+             <div className="my-4 p-4 bg-blue-100 rounded-lg">
+                <p className="text-4xl font-bold text-blue-700">{myIdentity.myTarget}</p>
+             </div>
+           </div>
+           
+           {/* --- 2. Lista de deseos de tu amigo secreto --- */}
+           <div className="border-t pt-4">
+              <h2 className="font-semibold text-lg mb-2">💡 Lista de deseos de {myIdentity.myTarget}:</h2>
+              {targetWishlist === null ? (
+                <p className="text-sm text-gray-500">Cargando lista...</p>
+              ) : (
+                <div className="bg-gray-100 p-3 rounded-lg min-h-[50px]">
+                  <p className="text-gray-700 whitespace-pre-wrap">{targetWishlist || "(Aún no ha escrito su lista. ¡Revisa esta página más tarde!)"}</p>
+                </div>
+              )}
+           </div>
+
+           {/* --- 3. Formulario para TU lista de deseos --- */}
+           <div className="border-t pt-4">
+              <h2 className="font-semibold text-lg mb-2">📝 Ayuda a tu amigo secreto:</h2>
+              <p className="text-sm text-gray-600 mb-2">Escribe aquí tu lista de deseos o pistas para que la persona que te regala a TI sepa qué darte.</p>
+              <textarea
+                className="border p-2 w-full rounded-lg"
+                rows="3"
+                placeholder="Ej: Me gustan los chocolates, talla M, etc."
+                value={myWishlist}
+                onChange={(e) => setMyWishlist(e.target.value)}
+              />
+              <button
+                onClick={saveWishlist}
+                disabled={savingWishlist}
+                className="bg-green-600 text-white w-full py-2 rounded-lg hover:bg-green-700 mt-2 disabled:opacity-50"
+              >
+                {savingWishlist ? "Guardando..." : "Guardar mi lista"}
+              </button>
+           </div>
         </div>
       );
     }
-    
+
     // =============================================================
-    // COMPONENTE PRINCIPAL (DECIDE QUÉ VISTA MOSTRAR)
+    // VISTA #3: ADMIN (PÁGINA SECRETA DE REVELACIÓN)
     // =============================================================
-    function App() {
-      const [gameId, setGameId] = useState(null);
+    function AdminRevealView({ gameId, adminSecret }) {
+        const [loading, setLoading] = useState(false);
+        const [error, setError] = useState(null);
+        
+        const revealAll = async () => {
+            if (!confirm("¿Estás seguro?\nEsto revelará todos los nombres a todos los participantes. Esta acción no se puede deshacer.")) {
+                return;
+            }
+            setLoading(true);
+            try {
+                await db.collection("juegos").doc(gameId).update({ finalReveal: true });
+                alert("¡Revelación exitosa! Todos los jugadores ahora pueden ver los resultados.");
+                window.location.reload(); // Recarga la página para mostrar la vista final
+            } catch(e) {
+                setError("No se pudo activar la revelación.");
+                setLoading(false);
+            }
+        };
 
-      // Al cargar la página, revisa si hay un código de juego en el link
-      useEffect(() => {
-        const urlParams = new URLSearchParams(window.location.search);
-        const id = urlParams.get('juego');
-        if (id) {
-          setGameId(id);
-        }
-      }, []);
-
-      // Si hay un 'gameId' en el link, muestra la vista de participante
-      if (gameId) {
-        return <ParticipantView gameId={gameId} />;
-      }
-      
-      // Si no, muestra la vista de administrador para crear un juego
-      return <AdminView />;
-    }
-
-    ReactDOM.render(<App />, document.getElementById("root"));
-  </script>
-</body>
-</html>
+        return (
+          <div className="bg-white shadow-xl rounded-2xl p-6 w-full text-center">
+            <h1 className="text-2xl font-bold text-yellow-600 mb-4">🔐 Panel de Administrador</h1>
+            <p className="text-gray-700 mb-4">Estás a punto de finalizar el juego. Al presionar este botón, todos los participantes podrán ver la lista completa de "quién le regaló a quién".</p>
+            <p className="text-gray-700 font-semibold mb-6">Úsalo solo cuando el intercambio de regalos haya terminado.</p>
+            
+            <button
+              onClick={revealAll}
+              disabled={loading}
+              className="bg-red-600 text-white w-full py-3 rounded-lg hover:bg-red-700 text-lg font-bold disabled:opacity-50"
+            >
+              {loading ? "..." : "¡REVELAR TODOS AHORA!"}
+            </button>
+            {error && <p c
