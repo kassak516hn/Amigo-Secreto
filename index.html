@@ -389,8 +389,7 @@
         </div>
       );
     }
-
-    // =============================================================
+        // =============================================================
     // VISTA #3: ADMIN (PÁGINA SECRETA DE REVELACIÓN)
     // =============================================================
     function AdminRevealView({ gameId, adminSecret }) {
@@ -425,4 +424,114 @@
             >
               {loading ? "..." : "¡REVELAR TODOS AHORA!"}
             </button>
-            {error && <p c
+            {error && <p className="text-red-500 mt-4">{error}</p>}
+          </div>
+        );
+    }
+    
+    // =============================================================
+    // VISTA #4: REVELACIÓN FINAL (TODOS VEN ESTO)
+    // =============================================================
+    function FinalRevealView({ gameId }) {
+        const [loading, setLoading] = useState(true);
+        const [assignments, setAssignments] = useState([]);
+        
+        useEffect(() => {
+            db.collection("juegos").doc(gameId).collection("participantes").get()
+                .then(snapshot => {
+                    const allPairs = snapshot.docs.map(doc => doc.data());
+                    setAssignments(allPairs);
+                    setLoading(false);
+                });
+        }, [gameId]);
+
+        return (
+          <div className="bg-white shadow-xl rounded-2xl p-6 w-full">
+            <h1 className="text-2xl font-bold text-center mb-4">🎉 ¡Resultados Finales!</h1>
+            <p className="text-center text-gray-600 mb-4">¡El juego ha terminado! Aquí están todas las parejas:</p>
+            
+            {loading ? (
+                <p>Cargando resultados...</p>
+            ) : (
+                <ul className="list-none space-y-2">
+                    {assignments.map(p => (
+                        <li key={p.nombre} className="p-3 bg-gray-100 rounded-lg flex items-center justify-center">
+                            <span className="font-bold text-blue-600">{p.nombre}</span>
+                            <span className="mx-3 text-gray-500">→</span>
+                            <span className="font-bold text-green-600">{p.leTocaA}</span>
+                        </li>
+                    ))}
+                </ul>
+            )}
+             <a href={window.location.href.split('?')[0]} className="block text-center text-blue-600 mt-6">Crear un nuevo juego</a>
+          </div>
+        );
+    }
+
+    // =============================================================
+    // APP PRINCIPAL (ROUTER: Decide qué vista mostrar)
+    // =============================================================
+    function App() {
+      const [view, setView] = useState('loading'); // 'loading', 'adminCreate', 'participant', 'adminReveal', 'finalReveal', 'error'
+      const [gameId, setGameId] = useState(null);
+      const [adminSecret, setAdminSecret] = useState(null);
+
+      useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const game = params.get('juego');
+        const admin = params.get('admin');
+
+        if (game) {
+          setGameId(game);
+          if (admin) setAdminSecret(admin);
+
+          db.collection("juegos").doc(game).get()
+            .then(doc => {
+              if (!doc.exists) {
+                setView('error');
+                return;
+              }
+              const gameData = doc.data();
+              
+              if (gameData.finalReveal === true) {
+                setView('finalReveal');
+              } else if (admin && admin === gameData.adminSecret) {
+                setView('adminReveal');
+              } else {
+                setView('participant');
+              }
+            })
+            .catch(err => setView('error'));
+        } else {
+          setView('adminCreate'); // No hay 'juego', muestra la página de creación
+        }
+      }, []);
+
+      // Renderiza la vista correcta según el estado
+      switch (view) {
+        case 'loading':
+          return <div className="text-center p-6"><p>Cargando...</p></div>;
+        case 'adminCreate':
+          return <AdminView />;
+        case 'participant':
+          return <ParticipantView gameId={gameId} />;
+        case 'adminReveal':
+          return <AdminRevealView gameId={gameId} adminSecret={adminSecret} />;
+        case 'finalReveal':
+          return <FinalRevealView gameId={gameId} />;
+        case 'error':
+        default:
+          return (
+             <div className="bg-white shadow-xl rounded-2xl p-6 w-full text-center">
+                <h1 className="text-2xl font-bold text-red-600 mb-4">Error</h1>
+                <p className="text-gray-700">El juego que buscas no existe o el link es incorrecto.</p>
+                <a href={window.location.href.split('?')[0]} className="block text-blue-600 mt-4">Crear un juego nuevo</a>
+             </div>
+          );
+      }
+    }
+
+    ReactDOM.render(<App />, document.getElementById("root"));
+  </script>
+</body>
+</html>
