@@ -1,514 +1,212 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Amigo Secreto Virtual</title>
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Amigo Secreto Virtual</title>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
 </head>
+
 <body>
-    <div id="root"></div>
-    <script type="text/babel">
-        const { useState, useEffect } = React;
+  <div id="root"></div>
 
-        // Iconos SVG
-        const Gift = ({ className }) => (
-            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7" />
-            </svg>
-        );
+  <!-- 🔥 CONFIGURACIÓN DE FIREBASE -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+    import { getFirestore, doc, setDoc, getDoc, updateDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
-        const Users = ({ className }) => (
-            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-            </svg>
-        );
+    const firebaseConfig = {
+      apiKey: "AIzaSyBnbMA899xhAT0wYrpUcKa1H0v3qzOPs6A",
+      authDomain: "amigo-secreto-9e366.firebaseapp.com",
+      projectId: "amigo-secreto-9e366",
+      storageBucket: "amigo-secreto-9e366.firebasestorage.app",
+      messagingSenderId: "134510716985",
+      appId: "1:134510716985:web:68f528a74abe082e6045e8"
+    };
 
-        const Shuffle = ({ className }) => (
-            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-            </svg>
-        );
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    window.db = db; // 🔹 disponible globalmente
+  </script>
 
-        const Eye = ({ className }) => (
-            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-            </svg>
-        );
+  <!-- 🧠 CÓDIGO PRINCIPAL DE LA APP -->
+  <script type="text/babel">
+    const { useState, useEffect } = React;
 
-        const EyeOff = ({ className }) => (
-            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-            </svg>
-        );
+    function SecretSanta() {
+      const [participants, setParticipants] = useState([]);
+      const [newName, setNewName] = useState('');
+      const [gameId, setGameId] = useState('');
+      const [assignments, setAssignments] = useState({});
+      const [revealed, setRevealed] = useState([]);
+      const [isOrganizer, setIsOrganizer] = useState(false);
+      const [viewingAs, setViewingAs] = useState('');
+      const [myAssignment, setMyAssignment] = useState('');
+      const [showAssignment, setShowAssignment] = useState(false);
+      const [step, setStep] = useState('setup');
+      const [error, setError] = useState('');
 
-        const Share2 = ({ className }) => (
-            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-            </svg>
-        );
+      // 🔹 Detectar si hay un juego activo en el URL
+      useEffect(() => {
+        const urlParams = new URLSearchParams(window.location.search);
+        const id = urlParams.get('game');
+        if (id) {
+          setGameId(id);
+          loadGameFromFirebase(id);
+        }
+      }, []);
 
-        const Trash2 = ({ className }) => (
-            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-            </svg>
-        );
+      // 🔹 Escuchar cambios en Firestore en tiempo real
+      const loadGameFromFirebase = async (id) => {
+        const ref = doc(window.db, "games", id);
+        onSnapshot(ref, (docSnap) => {
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            setParticipants(data.participants || []);
+            setAssignments(data.assignments || {});
+            setRevealed(data.revealed || []);
+            setStep(data.assignments ? "reveal" : "setup");
+          } else {
+            setError("No se encontró este juego o fue eliminado.");
+          }
+        });
+      };
 
-        const CheckCircle = ({ className }) => (
-            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-        );
+      const generateGameId = () => Math.random().toString(36).substring(2, 8).toUpperCase();
 
-        const Lock = ({ className }) => (
-            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-            </svg>
-        );
+      const addParticipant = () => {
+        if (newName.trim() && !participants.includes(newName.trim())) {
+          setParticipants([...participants, newName.trim()]);
+          setNewName('');
+          setError('');
+        }
+      };
 
-        function SecretSanta() {
-            const [participants, setParticipants] = useState([]);
-            const [newName, setNewName] = useState('');
-            const [gameId, setGameId] = useState('');
-            const [assignments, setAssignments] = useState({});
-            const [revealed, setRevealed] = useState([]);
-            const [isOrganizer, setIsOrganizer] = useState(false);
-            const [viewingAs, setViewingAs] = useState('');
-            const [myAssignment, setMyAssignment] = useState('');
-            const [showAssignment, setShowAssignment] = useState(false);
-            const [step, setStep] = useState('setup');
-            const [error, setError] = useState('');
+      const removeParticipant = (name) => {
+        setParticipants(participants.filter(p => p !== name));
+      };
 
-            useEffect(() => {
-                loadGame();
-            }, []);
+      const shuffleArray = (array) => {
+        const shuffled = [...array];
+        for (let i = shuffled.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+        }
+        return shuffled;
+      };
 
-            const loadGame = () => {
-                const urlParams = new URLSearchParams(window.location.search);
-                const id = urlParams.get('game');
-                
-                if (id) {
-                    try {
-                        const gameData = localStorage.getItem(`secret-santa:${id}`);
-                        if (gameData) {
-                            const data = JSON.parse(gameData);
-                            setGameId(id);
-                            setParticipants(data.participants);
-                            setAssignments(data.assignments || {});
-                            setRevealed(data.revealed || []);
-                            setStep(data.assignments ? 'reveal' : 'setup');
-                        }
-                    } catch (error) {
-                        console.log('No se encontró el juego');
-                    }
-                }
-            };
-
-            const generateGameId = () => {
-                return Math.random().toString(36).substring(2, 8).toUpperCase();
-            };
-
-            const addParticipant = () => {
-                if (newName.trim() && !participants.includes(newName.trim())) {
-                    setParticipants([...participants, newName.trim()]);
-                    setNewName('');
-                    setError('');
-                }
-            };
-
-            const removeParticipant = (name) => {
-                setParticipants(participants.filter(p => p !== name));
-            };
-
-            const shuffleArray = (array) => {
-                const shuffled = [...array];
-                for (let i = shuffled.length - 1; i > 0; i--) {
-                    const j = Math.floor(Math.random() * (i + 1));
-                    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-                }
-                return shuffled;
-            };
-
-            const createAssignments = () => {
-                if (participants.length < 3) {
-                    setError('Necesitas al menos 3 participantes');
-                    return;
-                }
-
-                let attempts = 0;
-                let validAssignment = false;
-                let newAssignments = {};
-
-                while (!validAssignment && attempts < 100) {
-                    const shuffled = shuffleArray(participants);
-                    newAssignments = {};
-                    validAssignment = true;
-
-                    for (let i = 0; i < participants.length; i++) {
-                        const giver = participants[i];
-                        const receiver = shuffled[i];
-                        
-                        if (giver === receiver) {
-                            validAssignment = false;
-                            break;
-                        }
-                        newAssignments[giver] = receiver;
-                    }
-                    attempts++;
-                }
-
-                if (validAssignment) {
-                    const id = generateGameId();
-                    const gameData = {
-                        participants,
-                        assignments: newAssignments,
-                        revealed: [],
-                        createdAt: new Date().toISOString()
-                    };
-
-                    try {
-                        localStorage.setItem(`secret-santa:${id}`, JSON.stringify(gameData));
-                        setGameId(id);
-                        setAssignments(newAssignments);
-                        setRevealed([]);
-                        setIsOrganizer(true);
-                        setStep('share');
-                        
-                        const url = `${window.location.origin}${window.location.pathname}?game=${id}`;
-                        window.history.pushState({}, '', url);
-                    } catch (error) {
-                        setError('Error al crear el juego. Intenta de nuevo.');
-                    }
-                } else {
-                    setError('No se pudo crear una asignación válida. Intenta de nuevo.');
-                }
-            };
-
-            const revealMyAssignment = () => {
-                if (viewingAs && assignments[viewingAs]) {
-                    if (revealed.includes(viewingAs)) {
-                        setError('Este nombre ya ha sido revelado por otra persona');
-                        return;
-                    }
-
-                    setMyAssignment(assignments[viewingAs]);
-                    setShowAssignment(true);
-
-                    const newRevealed = [...revealed, viewingAs];
-                    setRevealed(newRevealed);
-
-                    try {
-                        const gameData = localStorage.getItem(`secret-santa:${gameId}`);
-                        if (gameData) {
-                            const data = JSON.parse(gameData);
-                            data.revealed = newRevealed;
-                            localStorage.setItem(`secret-santa:${gameId}`, JSON.stringify(data));
-                        }
-                    } catch (error) {
-                        console.error('Error al actualizar revelados:', error);
-                    }
-                }
-            };
-
-            const copyLink = () => {
-                const url = `${window.location.origin}${window.location.pathname}?game=${gameId}`;
-                navigator.clipboard.writeText(url);
-                alert('¡Link copiado! Compártelo con los participantes.');
-            };
-
-            const resetGame = () => {
-                if (confirm('¿Estás seguro de eliminar este juego?')) {
-                    try {
-                        localStorage.removeItem(`secret-santa:${gameId}`);
-                        setParticipants([]);
-                        setAssignments({});
-                        setRevealed([]);
-                        setGameId('');
-                        setStep('setup');
-                        setViewingAs('');
-                        setMyAssignment('');
-                        setShowAssignment(false);
-                        window.history.pushState({}, '', window.location.pathname);
-                    } catch (error) {
-                        setError('Error al eliminar el juego');
-                    }
-                }
-            };
-
-            const availableNames = participants.filter(name => !revealed.includes(name));
-
-            return (
-                <div className="min-h-screen bg-gradient-to-br from-red-50 via-green-50 to-red-50 p-4">
-                    <div className="max-w-2xl mx-auto">
-                        <div className="bg-white rounded-2xl shadow-xl p-8 mb-6">
-                            <div className="flex items-center justify-center gap-3 mb-6">
-                                <Gift className="w-10 h-10 text-red-500" />
-                                <h1 className="text-3xl font-bold text-gray-800">Amigo Secreto Virtual</h1>
-                            </div>
-
-                            {error && (
-                                <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-                                    {error}
-                                    <button 
-                                        onClick={() => setError('')}
-                                        className="float-right font-bold"
-                                    >
-                                        ×
-                                    </button>
-                                </div>
-                            )}
-
-                            {step === 'setup' && (
-                                <div className="space-y-6">
-                                    <div className="bg-blue-50 p-4 rounded-lg">
-                                        <p className="text-sm text-blue-800">
-                                            <strong>Paso 1:</strong> Agrega los nombres de todos los participantes
-                                        </p>
-                                    </div>
-
-                                    <div className="flex gap-2">
-                                        <input
-                                            type="text"
-                                            value={newName}
-                                            onChange={(e) => setNewName(e.target.value)}
-                                            onKeyPress={(e) => e.key === 'Enter' && addParticipant()}
-                                            placeholder="Nombre del participante"
-                                            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                                        />
-                                        <button
-                                            onClick={addParticipant}
-                                            className="px-6 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition"
-                                        >
-                                            Agregar
-                                        </button>
-                                    </div>
-
-                                    {participants.length > 0 && (
-                                        <div className="space-y-2">
-                                            <div className="flex items-center gap-2 text-gray-700 mb-2">
-                                                <Users className="w-5 h-5" />
-                                                <h3 className="font-semibold">Participantes ({participants.length})</h3>
-                                            </div>
-                                            {participants.map((name, index) => (
-                                                <div key={index} className="flex items-center justify-between bg-gray-50 px-4 py-2 rounded-lg">
-                                                    <span className="text-gray-700">{name}</span>
-                                                    <button
-                                                        onClick={() => removeParticipant(name)}
-                                                        className="text-red-500 hover:text-red-700"
-                                                    >
-                                                        <Trash2 className="w-4 h-4" />
-                                                    </button>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-
-                                    {participants.length >= 3 && (
-                                        <button
-                                            onClick={createAssignments}
-                                            className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-red-500 text-white rounded-lg hover:bg-red-600 transition font-semibold text-lg"
-                                        >
-                                            <Shuffle className="w-5 h-5" />
-                                            Crear Sorteo
-                                        </button>
-                                    )}
-                                </div>
-                            )}
-
-                            {step === 'share' && (
-                                <div className="space-y-6">
-                                    <div className="bg-green-100 border border-green-400 p-4 rounded-lg">
-                                        <p className="text-green-800 font-semibold mb-2">¡Sorteo creado exitosamente!</p>
-                                        <p className="text-sm text-green-700">Código del juego: <strong>{gameId}</strong></p>
-                                    </div>
-
-                                    <div className="bg-blue-50 p-4 rounded-lg">
-                                        <p className="text-sm text-blue-800 mb-3">
-                                            <strong>Paso 2:</strong> Comparte este link con todos los participantes
-                                        </p>
-                                        <div className="flex gap-2">
-                                            <input
-                                                type="text"
-                                                value={`${window.location.origin}${window.location.pathname}?game=${gameId}`}
-                                                readOnly
-                                                className="flex-1 px-3 py-2 bg-white border border-gray-300 rounded text-sm"
-                                            />
-                                            <button
-                                                onClick={copyLink}
-                                                className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition flex items-center gap-2"
-                                            >
-                                                <Share2 className="w-4 h-4" />
-                                                Copiar
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    <button
-                                        onClick={() => setStep('reveal')}
-                                        className="w-full px-6 py-3 bg-red-500 text-white rounded-lg hover:bg-red-600 transition font-semibold"
-                                    >
-                                        Continuar para ver mi asignación
-                                    </button>
-                                </div>
-                            )}
-
-                            {step === 'reveal' && (
-                                <div className="space-y-6">
-                                    <div className="bg-yellow-50 p-4 rounded-lg">
-                                        <p className="text-sm text-yellow-800 mb-2">
-                                            <strong>Importante:</strong> Cada persona debe abrir el link en privado y seleccionar su nombre
-                                        </p>
-                                        <div className="mt-2 pt-2 border-t border-yellow-200">
-                                            <p className="text-xs text-yellow-700">
-                                                Progreso: {revealed.length} de {participants.length} personas han revelado su amigo secreto
-                                            </p>
-                                        </div>
-                                    </div>
-
-                                    {!showAssignment ? (
-                                        <>
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                    Selecciona tu nombre:
-                                                </label>
-                                                <select
-                                                    value={viewingAs}
-                                                    onChange={(e) => setViewingAs(e.target.value)}
-                                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                                                >
-                                                    <option value="">-- Elige tu nombre --</option>
-                                                    {participants.map((name, index) => (
-                                                        <option 
-                                                            key={index} 
-                                                            value={name}
-                                                            disabled={revealed.includes(name)}
-                                                        >
-                                                            {name} {revealed.includes(name) ? '✓ (ya revelado)' : ''}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                            </div>
-
-                                            {availableNames.length > 0 && (
-                                                <div className="bg-gray-50 p-3 rounded text-sm">
-                                                    <div className="flex items-center gap-2 text-gray-600 mb-2">
-                                                        <CheckCircle className="w-4 h-4 text-green-500" />
-                                                        <span className="font-medium">Nombres disponibles:</span>
-                                                    </div>
-                                                    <div className="flex flex-wrap gap-2">
-                                                        {availableNames.map((name, idx) => (
-                                                            <span key={idx} className="bg-white px-3 py-1 rounded-full text-gray-700 text-xs">
-                                                                {name}
-                                                            </span>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {revealed.length > 0 && (
-                                                <div className="bg-red-50 p-3 rounded text-sm">
-                                                    <div className="flex items-center gap-2 text-gray-600 mb-2">
-                                                        <Lock className="w-4 h-4 text-red-500" />
-                                                        <span className="font-medium">Ya revelaron:</span>
-                                                    </div>
-                                                    <div className="flex flex-wrap gap-2">
-                                                        {revealed.map((name, idx) => (
-                                                            <span key={idx} className="bg-white px-3 py-1 rounded-full text-gray-500 text-xs line-through">
-                                                                {name}
-                                                            </span>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {viewingAs && !revealed.includes(viewingAs) && (
-                                                <button
-                                                    onClick={revealMyAssignment}
-                                                    className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-red-500 text-white rounded-lg hover:bg-red-600 transition font-semibold text-lg"
-                                                >
-                                                    <Eye className="w-5 h-5" />
-                                                    Revelar mi amigo secreto
-                                                </button>
-                                            )}
-
-                                            {viewingAs && revealed.includes(viewingAs) && (
-                                                <div className="bg-red-100 p-4 rounded-lg text-center">
-                                                    <Lock className="w-12 h-12 mx-auto mb-2 text-red-500" />
-                                                    <p className="text-red-800 font-semibold">
-                                                        Este nombre ya fue usado por otra persona
-                                                    </p>
-                                                    <p className="text-sm text-red-600 mt-1">
-                                                        Por favor, selecciona tu nombre correcto
-                                                    </p>
-                                                </div>
-                                            )}
-                                        </>
-                                    ) : (
-                                        <div className="text-center space-y-4">
-                                            <div className="bg-gradient-to-r from-red-500 to-green-500 p-8 rounded-xl text-white">
-                                                <p className="text-lg mb-2">Tu amigo secreto es:</p>
-                                                <p className="text-4xl font-bold">{myAssignment}</p>
-                                                <Gift className="w-16 h-16 mx-auto mt-4 opacity-80" />
-                                            </div>
-
-                                            <div className="bg-red-50 p-4 rounded-lg">
-                                                <p className="text-sm text-red-800">
-                                                    ¡Recuerda mantenerlo en secreto! 🤫
-                                                </p>
-                                                <p className="text-xs text-red-600 mt-2">
-                                                    Anota tu amigo secreto. Puedes cerrar esta pantalla.
-                                                </p>
-                                            </div>
-
-                                            <button
-                                                onClick={() => {
-                                                    setShowAssignment(false);
-                                                    setViewingAs('');
-                                                    setMyAssignment('');
-                                                    loadGame();
-                                                }}
-                                                className="px-6 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition flex items-center gap-2 mx-auto"
-                                            >
-                                                <EyeOff className="w-4 h-4" />
-                                                Cerrar
-                                            </button>
-                                        </div>
-                                    )}
-
-                                    {isOrganizer && (
-                                        <div className="pt-6 border-t">
-                                            <button
-                                                onClick={resetGame}
-                                                className="w-full px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition text-sm"
-                                            >
-                                                Eliminar este juego
-                                            </button>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-
-                        <div className="bg-white rounded-lg shadow p-4 text-sm text-gray-600">
-                            <p className="font-semibold mb-2">¿Cómo funciona?</p>
-                            <ol className="list-decimal list-inside space-y-1">
-                                <li>El organizador agrega todos los nombres y crea el sorteo</li>
-                                <li>Se comparte el link con todos los participantes</li>
-                                <li>Cada persona abre el link, selecciona su nombre y descubre a quién le toca</li>
-                                <li>Una vez que un nombre es usado, queda bloqueado para evitar duplicados</li>
-                                <li>¡Nadie puede ver la asignación de otra persona!</li>
-                            </ol>
-                        </div>
-                    </div>
-                </div>
-            );
+      // 🔹 Crear sorteo y guardarlo en Firebase
+      const createAssignments = async () => {
+        if (participants.length < 3) {
+          setError('Necesitas al menos 3 participantes');
+          return;
         }
 
-        ReactDOM.render(<SecretSanta />, document.getElementById('root'));
-    </script>
-</body>
-</html>
+        let attempts = 0;
+        let validAssignment = false;
+        let newAssignments = {};
+
+        while (!validAssignment && attempts < 100) {
+          const shuffled = shuffleArray(participants);
+          newAssignments = {};
+          validAssignment = true;
+
+          for (let i = 0; i < participants.length; i++) {
+            const giver = participants[i];
+            const receiver = shuffled[i];
+            if (giver === receiver) {
+              validAssignment = false;
+              break;
+            }
+            newAssignments[giver] = receiver;
+          }
+          attempts++;
+        }
+
+        if (validAssignment) {
+          const id = generateGameId();
+          const ref = doc(window.db, "games", id);
+          const gameData = {
+            participants,
+            assignments: newAssignments,
+            revealed: [],
+            createdAt: new Date().toISOString()
+          };
+          await setDoc(ref, gameData);
+
+          setGameId(id);
+          setAssignments(newAssignments);
+          setRevealed([]);
+          setIsOrganizer(true);
+          setStep('share');
+
+          const url = `${window.location.origin}${window.location.pathname}?game=${id}`;
+          window.history.pushState({}, '', url);
+        } else {
+          setError('No se pudo crear una asignación válida. Intenta de nuevo.');
+        }
+      };
+
+      // 🔹 Revelar amigo secreto y actualizar Firestore
+      const revealMyAssignment = async () => {
+        if (viewingAs && assignments[viewingAs]) {
+          if (revealed.includes(viewingAs)) {
+            setError('Este nombre ya fue revelado');
+            return;
+          }
+          setMyAssignment(assignments[viewingAs]);
+          setShowAssignment(true);
+
+          const newRevealed = [...revealed, viewingAs];
+          setRevealed(newRevealed);
+
+          const ref = doc(window.db, "games", gameId);
+          await updateDoc(ref, { revealed: newRevealed });
+        }
+      };
+
+      const copyLink = () => {
+        const url = `${window.location.origin}${window.location.pathname}?game=${gameId}`;
+        navigator.clipboard.writeText(url);
+        alert('¡Link copiado! Compártelo con los participantes.');
+      };
+
+      const availableNames = participants.filter(n => !revealed.includes(n));
+
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-red-50 via-green-50 to-red-50 p-4">
+          <div className="max-w-2xl mx-auto bg-white rounded-2xl shadow-xl p-8">
+            <h1 className="text-3xl font-bold text-center text-gray-800 mb-6">🎁 Amigo Secreto Virtual</h1>
+
+            {error && (
+              <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+                {error}
+                <button onClick={() => setError('')} className="float-right font-bold">×</button>
+              </div>
+            )}
+
+            {/* PASO 1: CREAR JUEGO */}
+            {step === "setup" && (
+              <div className="space-y-4">
+                <input
+                  type="text"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  placeholder="Nombre del participante"
+                  className="w-full px-4 py-2 border rounded-lg"
+                />
+                <button onClick={addParticipant} className="w-full bg-green-500 text-white py-2 rounded-lg">Agregar</button>
+
+                <ul className="divide-y">
+                  {participants.map((p, i) => (
+                    <li key={i} className="flex justify-between py-1">
+                      {p}
+                      <button onClick={() => removeParticipant(p)} className="text-red-500">✕</button>
+                    </li>
+                  ))}
+                </ul>
+
+                {participants.length >=
