@@ -5,19 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Amigo Secreto Remoto 🎁</title>
 
-  <!-- React + Babel -->
   <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
   <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
 
-  <!-- Tailwind (opcional, para estilos bonitos) -->
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-100 min-h-screen flex items-center justify-center p-4">
 
   <div id="root" class="w-full max-w-md"></div>
 
-  <!-- 🔥 Firebase SDKs (compatibles con React directo en navegador) -->
   <script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore-compat.js"></script>
 
@@ -40,7 +37,6 @@
     window.db = db;
   </script>
 
-  <!-- 🧠 Lógica del juego con React -->
   <script type="text/babel">
 
     const { useState, useEffect } = React;
@@ -60,12 +56,26 @@
         return () => unsubscribe();
       }, []);
 
-      // 🔹 Agregar jugador
+      // 
+      // ⭐ AQUÍ ESTÁ EL CÓDIGO MODIFICADO ⭐
+      // 
+      // 🔹 Agregar jugador (Mejorado: evita duplicados)
       const addPlayer = async () => {
         if (!name.trim()) return;
-        await db.collection("jugadores").add({ nombre: name.trim() });
-        setName("");
+        
+        // Usamos el nombre como ID para que no se pueda repetir
+        try {
+          const nombreLimpio = name.trim();
+          await db.collection("jugadores").doc(nombreLimpio).set({ nombre: nombreLimpio });
+          setName("");
+        } catch (error) {
+          console.error("Error al agregar jugador:", error);
+          alert("Hubo un error al agregarte. Intenta de nuevo.");
+        }
       };
+      // 
+      // ⭐ FIN DEL CÓDIGO MODIFICADO ⭐
+      // 
 
       // 🔹 Hacer el sorteo
       const shuffle = async () => {
